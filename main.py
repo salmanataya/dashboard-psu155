@@ -197,12 +197,12 @@ def root():
 @app.get("/stocks/{ticker}")
 def get_stock_data(ticker: str):
 
-    query = """
-    SELECT *
-    FROM stock_prices
-    WHERE ticker = :ticker
-    ORDER BY date
-    """
+    query = text("""
+        SELECT *
+        FROM stock_prices
+        WHERE ticker = :ticker
+        ORDER BY date
+    """)
 
     df = pd.read_sql(query, engine, params={"ticker": ticker})
 
@@ -212,12 +212,12 @@ def get_stock_data(ticker: str):
 def get_features(ticker: str):
 
     query = text("""
-    SELECT *
-    FROM stock_prices
-    WHERE ticker = :ticker
-    ORDER BY date
+        SELECT *
+        FROM stock_features
+        WHERE ticker = :ticker
+        ORDER BY date
     """)
-    
+
     df = pd.read_sql(query, engine, params={"ticker": ticker})
 
     return df.to_dict(orient="records")
