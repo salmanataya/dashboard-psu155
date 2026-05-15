@@ -199,11 +199,11 @@ def get_stock_data(ticker: str):
     query = """
     SELECT *
     FROM stock_prices
-    WHERE ticker = %s
+    WHERE ticker = :ticker
     ORDER BY date
     """
 
-    df = pd.read_sql(query, engine, params=[ticker])
+    df = pd.read_sql(query, engine, params={"ticker": ticker})
 
     return df.to_dict(orient="records")
 
