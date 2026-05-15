@@ -1,0 +1,238 @@
+from fastapi import FastAPI
+from sqlalchemy import create_engine
+from apscheduler.schedulers.background import BackgroundScheduler
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+import os
+import pandas as pd
+import yfinance as yf
+import numpy as np
+
+# =====================================
+# FASTAPI
+# =====================================
+
+app = FastAPI()
+
+# =====================================
+# DATABASE CONNECTION
+# =====================================
+load_dotenv()
+
+DATABASE_URL = os.getenv("NEON_DB")
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True
+)
+
+# =====================================
+# UPDATE FUNCTION
+# =====================================
+
+def update_stock_data():
+
+    print("RUNNING DAILY UPDATE...")
+
+    metadata_df = pd.read_sql(
+        "SELECT ticker FROM stock_metadata",
+        engine
+    )
+
+    tickers = metadata_df["ticker"].tolist()
+
+    for ticker in tickers:
+
+        yf_ticker = ticker + ".JK"
+
+        try:
+
+            # =====================================
+            # GET LAST DATE
+            # =====================================
+
+            query = f"""
+            SELECT MAX(date)
+            FROM stock_prices
+            WHERE ticker = '{ticker}'
+            """
+
+            last_date = pd.read_sql(
+                query,
+                engine
+            ).iloc[0, 0]
+
+            # =====================================
+            # FETCH NEW DATA
+            # =====================================
+
+            df = yf.download(
+                yf_ticker,
+                start=last_date,
+                progress=False,
+                auto_adjust=False
+            )
+
+            if df.empty:
+                continue
+
+            df = df.reset_index()
+
+            # flatten multiindex
+            df.columns = [
+                col[0] if isinstance(col, tuple) else col
+                for col in df.columns
+            ]
+
+            df["ticker"] = ticker
+
+            df = df[
+                [
+                    "Date",
+                    "ticker",
+                    "Open",
+                    "High",
+                    "Low",
+                    "Close",
+                    "Volume"
+                ]
+            ]
+
+            df.columns = [
+                "date",
+                "ticker",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume"
+            ]
+
+            # remove duplicates
+            existing_dates = pd.read_sql(
+                f"""
+                SELECT date
+                FROM stock_prices
+                WHERE ticker = '{ticker}'
+                """,
+                engine
+            )
+
+            df = df[
+                ~df["date"].isin(existing_dates["date"])
+            ]
+
+            # =====================================
+            # INSERT STOCK PRICES
+            # =====================================
+
+            df.to_sql(
+                "stock_prices",
+                engine,
+                if_exists="append",
+                index=False
+            )
+
+            # =====================================
+            # FEATURE ENGINEERING
+            # =====================================
+
+            feature_df = df.copy()
+
+            feature_df["daily_return"] = (
+                feature_df["close"].pct_change()
+            )
+
+            feature_df["log_return"] = np.log(
+                feature_df["close"]
+                /
+                feature_df["close"].shift(1)
+            )
+
+            feature_df["var_95"] = (
+                feature_df["daily_return"]
+                .rolling(30)
+                .quantile(0.05)
+            )
+
+            feature_df = feature_df[
+                [
+                    "date",
+                    "ticker",
+                    "daily_return",
+                    "log_return",
+                    "var_95"
+                ]
+            ]
+
+            feature_df.to_sql(
+                "stock_features",
+                engine,
+                if_exists="append",
+                index=False
+            )
+
+            print(f"UPDATED: {ticker}")
+
+        except Exception as e:
+            print(f"ERROR {ticker}: {e}")
+
+# =====================================
+# SCHEDULER
+# =====================================
+
+scheduler = BackgroundScheduler()
+
+# tiap hari jam 17:00
+scheduler.add_job(
+    update_stock_data,
+    "cron",
+    hour=17,
+    minute=0
+)
+
+scheduler.start()
+
+# =====================================
+# API ENDPOINTS
+# =====================================
+
+@app.get("/")
+def root():
+    return {"message": "Stockation API running"}
+
+@app.get("/stocks/{ticker}")
+def get_stock_data(ticker: str):
+
+    query = f"""
+    SELECT *
+    FROM stock_prices
+    WHERE ticker = '{ticker}'
+    ORDER BY date
+    """
+
+    df = pd.read_sql(query, engine)
+
+    return df.to_dict(orient="records")
+
+@app.get("/features/{ticker}")
+def get_features(ticker: str):
+
+    query = f"""
+    SELECT *
+    FROM stock_features
+    WHERE ticker = '{ticker}'
+    ORDER BY date
+    """
+
+    df = pd.read_sql(query, engine)
+
+    return df.to_dict(orient="records")
+
+@app.get("/update")
+def manual_update():
+
+    update_stock_data()
+
+    return {"message": "Update completed"}
