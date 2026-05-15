@@ -2,12 +2,13 @@ from fastapi import FastAPI
 from sqlalchemy import create_engine
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
-load_dotenv()
 
 import os
 import pandas as pd
 import yfinance as yf
 import numpy as np
+
+load_dotenv()
 
 # =====================================
 # FASTAPI
@@ -39,16 +40,14 @@ def update_stock_data():
         engine
     )
 
-    tickers = metadata_df["ticker"].tolist()
-
-    for ticker in tickers:
+    for ticker in metadata_df["ticker"].tolist():
 
         yf_ticker = ticker + ".JK"
 
         try:
 
             # =====================================
-            # GET LAST DATE
+            # GET LAST DATE (FIX NULL BUG)
             # =====================================
 
             query = f"""
@@ -57,10 +56,10 @@ def update_stock_data():
             WHERE ticker = '{ticker}'
             """
 
-            last_date = pd.read_sql(
-                query,
-                engine
-            ).iloc[0, 0]
+            last_date = pd.read_sql(query, engine).iloc[0, 0]
+
+            if last_date is None:
+                last_date = "2020-01-01"
 
             # =====================================
             # FETCH NEW DATA
@@ -78,25 +77,20 @@ def update_stock_data():
 
             df = df.reset_index()
 
-            # flatten multiindex
-            df.columns = [
-                col[0] if isinstance(col, tuple) else col
-                for col in df.columns
-            ]
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
 
             df["ticker"] = ticker
 
-            df = df[
-                [
-                    "Date",
-                    "ticker",
-                    "Open",
-                    "High",
-                    "Low",
-                    "Close",
-                    "Volume"
-                ]
-            ]
+            df = df[[
+                "Date",
+                "ticker",
+                "Open",
+                "High",
+                "Low",
+                "Close",
+                "Volume"
+            ]]
 
             df.columns = [
                 "date",
@@ -108,7 +102,12 @@ def update_stock_data():
                 "volume"
             ]
 
-            # remove duplicates
+            df["date"] = pd.to_datetime(df["date"])
+
+            # =====================================
+            # REMOVE DUPLICATES SAFELY
+            # =====================================
+
             existing_dates = pd.read_sql(
                 f"""
                 SELECT date
@@ -118,59 +117,53 @@ def update_stock_data():
                 engine
             )
 
-            df = df[
-                ~df["date"].isin(existing_dates["date"])
-            ]
+            if not existing_dates.empty:
+                existing_dates["date"] = pd.to_datetime(existing_dates["date"])
+                df = df[~df["date"].isin(existing_dates["date"])]
 
             # =====================================
             # INSERT STOCK PRICES
             # =====================================
 
-            df.to_sql(
-                "stock_prices",
-                engine,
-                if_exists="append",
-                index=False
-            )
+            if not df.empty:
+                df.to_sql(
+                    "stock_prices",
+                    engine,
+                    if_exists="append",
+                    index=False
+                )
 
             # =====================================
-            # FEATURE ENGINEERING
+            # FEATURE ENGINEERING (UNCHANGED LOGIC)
             # =====================================
 
             feature_df = df.copy()
 
-            feature_df["daily_return"] = (
-                feature_df["close"].pct_change()
-            )
+            if not feature_df.empty:
+                feature_df["daily_return"] = feature_df["close"].pct_change()
+                feature_df["log_return"] = np.log(
+                    feature_df["close"] / feature_df["close"].shift(1)
+                )
+                feature_df["var_95"] = (
+                    feature_df["daily_return"]
+                    .rolling(30)
+                    .quantile(0.05)
+                )
 
-            feature_df["log_return"] = np.log(
-                feature_df["close"]
-                /
-                feature_df["close"].shift(1)
-            )
-
-            feature_df["var_95"] = (
-                feature_df["daily_return"]
-                .rolling(30)
-                .quantile(0.05)
-            )
-
-            feature_df = feature_df[
-                [
+                feature_df = feature_df[[
                     "date",
                     "ticker",
                     "daily_return",
                     "log_return",
                     "var_95"
-                ]
-            ]
+                ]].dropna()
 
-            feature_df.to_sql(
-                "stock_features",
-                engine,
-                if_exists="append",
-                index=False
-            )
+                feature_df.to_sql(
+                    "stock_features",
+                    engine,
+                    if_exists="append",
+                    index=False
+                )
 
             print(f"UPDATED: {ticker}")
 
@@ -183,7 +176,6 @@ def update_stock_data():
 
 scheduler = BackgroundScheduler()
 
-# tiap hari jam 17:00
 scheduler.add_job(
     update_stock_data,
     "cron",
@@ -204,28 +196,28 @@ def root():
 @app.get("/stocks/{ticker}")
 def get_stock_data(ticker: str):
 
-    query = f"""
+    query = """
     SELECT *
     FROM stock_prices
-    WHERE ticker = '{ticker}'
+    WHERE ticker = %s
     ORDER BY date
     """
 
-    df = pd.read_sql(query, engine)
+    df = pd.read_sql(query, engine, params=[ticker])
 
     return df.to_dict(orient="records")
 
 @app.get("/features/{ticker}")
 def get_features(ticker: str):
 
-    query = f"""
+    query = """
     SELECT *
     FROM stock_features
-    WHERE ticker = '{ticker}'
+    WHERE ticker = %s
     ORDER BY date
     """
 
-    df = pd.read_sql(query, engine)
+    df = pd.read_sql(query, engine, params=[ticker])
 
     return df.to_dict(orient="records")
 
