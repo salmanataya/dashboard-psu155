@@ -1,12 +1,14 @@
 import pandas as pd
 import yfinance as yf
 from sqlalchemy import create_engine
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 # =====================================
 # CONNECT POSTGRESQL
 # =====================================
-
-import os
 
 DATABASE_URL = os.getenv("NEON_DB")
 
@@ -21,20 +23,11 @@ engine = create_engine(
 
 metadata_df = pd.read_sql(
     """
-    SELECT
-        ticker,
-        date_started
+    SELECT ticker, date_started
     FROM stock_metadata
     """,
     engine
 )
-
-tickers = metadata_df["ticker"].tolist()
-
-# tambah .JK
-yf_tickers = [ticker + ".JK" for ticker in tickers]
-
-print(yf_tickers)
 
 # =====================================
 # FETCH DATA
@@ -50,7 +43,6 @@ for _, row in metadata_df.iterrows():
     print(f"Fetching {ticker} from {start_date}...")
 
     try:
-
         df = yf.download(
             ticker,
             start=start_date,
@@ -64,25 +56,21 @@ for _, row in metadata_df.iterrows():
 
         df = df.reset_index()
 
-        # flatten multiindex
-        df.columns = [
-            col[0] if isinstance(col, tuple) else col
-            for col in df.columns
-        ]
+        # FIX MULTIINDEX SAFETY
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
 
-        df["ticker"] = ticker.replace(".JK", "")
+        df["ticker"] = row["ticker"]
 
-        df = df[
-            [
-                "Date",
-                "ticker",
-                "Open",
-                "High",
-                "Low",
-                "Close",
-                "Volume"
-            ]
-        ]
+        df = df[[
+            "Date",
+            "ticker",
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+        ]]
 
         df.columns = [
             "date",
@@ -94,6 +82,8 @@ for _, row in metadata_df.iterrows():
             "volume"
         ]
 
+        df["date"] = pd.to_datetime(df["date"])
+
         all_data.append(df)
 
         print(f"SUCCESS: {ticker}")
@@ -102,12 +92,18 @@ for _, row in metadata_df.iterrows():
         print(f"ERROR {ticker}: {e}")
 
 # =====================================
+# SAFETY CHECK (FIX CRASH)
+# =====================================
+
+if len(all_data) == 0:
+    print("No data fetched. Exit.")
+    exit()
+
+# =====================================
 # COMBINE ALL DATA
 # =====================================
 
 final_df = pd.concat(all_data, ignore_index=True)
-
-print(final_df.head())
 
 # =====================================
 # INSERT TO POSTGRESQL
