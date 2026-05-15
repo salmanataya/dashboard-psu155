@@ -212,13 +212,25 @@ def get_stock_data(ticker: str):
 def get_features(ticker: str):
 
     query = text("""
-        SELECT *
-        FROM stock_features
-        WHERE ticker = :ticker
-        ORDER BY date
+    SELECT *
+    FROM stock_features
+    WHERE ticker = :ticker
+    ORDER BY date
     """)
 
     df = pd.read_sql(query, engine, params={"ticker": ticker})
+
+    return df.to_dict(orient="records")
+
+@app.get("/metadata")
+def get_metadata():
+
+    query = """
+    SELECT *
+    FROM stock_metadata
+    """
+
+    df = pd.read_sql(query, engine)
 
     return df.to_dict(orient="records")
 
