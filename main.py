@@ -217,10 +217,8 @@ def get_features(ticker: str):
     WHERE ticker = :ticker
     ORDER BY date
     """)
-
-    df = pd.read_sql(query, engine, params={"ticker": ticker})
-
-    return df.to_dict(orient="records")
+    
+    df = pd.read_sql_query(query, engine, params={"ticker": ticker})
 
 @app.get("/metadata")
 def get_metadata():
