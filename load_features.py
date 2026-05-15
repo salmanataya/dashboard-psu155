@@ -1,14 +1,16 @@
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 # =====================================
 # CONNECT POSTGRESQL
 # =====================================
 
-import os
-
-DATABASE_URL = os.getenv("LOCAL_DB")
+DATABASE_URL = os.getenv("NEON_DB")
 
 engine = create_engine(
     DATABASE_URL,
@@ -36,17 +38,14 @@ print(df.head())
 # SORT DATA
 # =====================================
 
-df = df.sort_values(
-    by=["ticker", "date"]
-)
+df = df.sort_values(by=["ticker", "date"])
 
 # =====================================
 # DAILY RETURN
 # =====================================
 
 df["daily_return"] = (
-    df.groupby("ticker")["close"]
-    .pct_change()
+    df.groupby("ticker")["close"].pct_change()
 )
 
 # =====================================
@@ -55,36 +54,29 @@ df["daily_return"] = (
 
 df["log_return"] = (
     df.groupby("ticker")["close"]
-    .transform(
-        lambda x: np.log(x / x.shift(1))
-    )
+    .transform(lambda x: np.log(x / x.shift(1)))
 )
 
 # =====================================
 # VaR 95
-# rolling 30-day historical VaR
 # =====================================
 
 df["var_95"] = (
     df.groupby("ticker")["daily_return"]
-    .transform(
-        lambda x: x.rolling(30).quantile(0.05)
-    )
+    .transform(lambda x: x.rolling(30).quantile(0.05))
 )
 
 # =====================================
-# KEEP NEEDED COLUMNS
+# CLEAN NaN SAFETY (FIX BUG)
 # =====================================
 
-features_df = df[
-    [
-        "date",
-        "ticker",
-        "daily_return",
-        "log_return",
-        "var_95"
-    ]
-]
+features_df = df[[
+    "date",
+    "ticker",
+    "daily_return",
+    "log_return",
+    "var_95"
+]].dropna()
 
 print(features_df.head())
 
