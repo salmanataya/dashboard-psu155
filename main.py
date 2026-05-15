@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from sqlalchemy import create_engine
+from sqlalchemy import text
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 
@@ -210,14 +211,14 @@ def get_stock_data(ticker: str):
 @app.get("/features/{ticker}")
 def get_features(ticker: str):
 
-    query = """
+    query = text("""
     SELECT *
-    FROM stock_features
-    WHERE ticker = %s
+    FROM stock_prices
+    WHERE ticker = :ticker
     ORDER BY date
-    """
-
-    df = pd.read_sql(query, engine, params=[ticker])
+    """)
+    
+    df = pd.read_sql(query, engine, params={"ticker": ticker})
 
     return df.to_dict(orient="records")
 
