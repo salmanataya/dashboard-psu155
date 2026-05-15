@@ -5,10 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
-
-from sqlalchemy import create_engine
-
-import os
 import pandas as pd
 import yfinance as yf
 import numpy as np
