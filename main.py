@@ -220,6 +220,13 @@ def get_features(ticker: str):
 
     df = pd.read_sql_query(query, engine, params={"ticker": ticker})
 
+    # safety: handle empty data
+    if df.empty:
+        return {"message": "No features found", "data": []}
+
+    # safety: convert NaN -> None biar JSON aman
+    df = df.where(pd.notnull(df), None)
+
     return df.to_dict(orient="records")
 
 @app.get("/metadata")
