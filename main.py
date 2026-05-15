@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from sqlalchemy import create_engine
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
+load_dotenv()
+
+import os
+
 from sqlalchemy import create_engine
 
 import os
@@ -18,7 +22,6 @@ app = FastAPI()
 # =====================================
 # DATABASE CONNECTION
 # =====================================
-load_dotenv()
 
 DATABASE_URL = os.getenv("NEON_DB")
 
