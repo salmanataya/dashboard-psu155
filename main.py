@@ -191,11 +191,6 @@ scheduler.start()
 # API ENDPOINTS
 # =====================================
 
-def clean_df(df):
-    df = df.replace([np.inf, -np.inf], None)
-    df = df.where(pd.notnull(df), None)
-    return df
-
 def clean_json(df):
     df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
     return df
@@ -278,7 +273,8 @@ def get_metadata():
 
         df = pd.read_sql(query, engine)
 
-        df = clean_df(df)
+        # ONLY metadata cleaning (safe version)
+        df = df.replace([np.nan, np.inf, -np.inf], None)
 
         return df.to_dict(orient="records")
 
