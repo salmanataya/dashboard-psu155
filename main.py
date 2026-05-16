@@ -210,25 +210,20 @@ def get_stock_data(ticker: str):
 
 @app.get("/features/{ticker}")
 def get_features(ticker: str):
-    try:
-        query = text("""
-            SELECT *
-            FROM stock_features
-            WHERE ticker = :ticker
-            ORDER BY date
-        """)
 
-        print("DEBUG ticker:", ticker)
+    # normalize .JK suffix
+    clean_ticker = ticker.replace(".JK", "")
 
-        df = pd.read_sql(query, engine, params={"ticker": ticker})
+    query = text("""
+        SELECT *
+        FROM stock_features
+        WHERE ticker = :ticker
+        ORDER BY date
+    """)
 
-        print("DEBUG rows:", len(df))
+    df = pd.read_sql(query, engine, params={"ticker": clean_ticker})
 
-        return df.to_dict(orient="records")
-
-    except Exception as e:
-        print("ERROR FEATURES:", e)
-        return {"error": str(e)}
+    return df.to_dict(orient="records")
 
 @app.get("/metadata")
 def get_metadata():
