@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 import os
 import pandas as pd
+import math
 import yfinance as yf
 import numpy as np
 
@@ -195,6 +196,10 @@ def clean_df(df):
     df = df.where(pd.notnull(df), None)
     return df
 
+def clean_json(df):
+    df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+    return df
+
 @app.get("/")
 def root():
     return {"message": "Stockation API running"}
@@ -221,13 +226,12 @@ def get_stock_data(ticker: str = None):
             """
             df = pd.read_sql(query, engine)
 
-        df = clean_df(df)
-
+        df = clean_json(df)
         return df.to_dict(orient="records")
 
     except Exception as e:
         return {"error": str(e)}
-
+        
 @app.get("/features")
 @app.get("/features/{ticker}")
 def get_features(ticker: str = None):
@@ -247,8 +251,7 @@ def get_features(ticker: str = None):
                 result = conn.execute(query, {"ticker": clean_ticker})
                 rows = result.fetchall()
 
-            data = [dict(row._mapping) for row in rows]
-            df = pd.DataFrame(data)
+            df = pd.DataFrame([dict(r._mapping) for r in rows])
 
         else:
             query = """
@@ -258,8 +261,7 @@ def get_features(ticker: str = None):
             """
             df = pd.read_sql(query, engine)
 
-        df = clean_df(df)
-
+        df = clean_json(df)
         return df.to_dict(orient="records")
 
     except Exception as e:
