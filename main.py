@@ -211,9 +211,6 @@ def get_stock_data(ticker: str):
 @app.get("/features/{ticker}")
 def get_features(ticker: str):
 
-    # normalize .JK suffix
-    clean_ticker = ticker.replace(".JK", "")
-
     query = text("""
         SELECT *
         FROM stock_features
@@ -221,7 +218,7 @@ def get_features(ticker: str):
         ORDER BY date
     """)
 
-    df = pd.read_sql(query, engine, params={"ticker": clean_ticker})
+    df = pd.read_sql(query, engine, params={"ticker": ticker})
 
     return df.to_dict(orient="records")
 
