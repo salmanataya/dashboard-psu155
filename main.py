@@ -211,6 +211,8 @@ def get_stock_data(ticker: str):
 @app.get("/features/{ticker}")
 def get_features(ticker: str):
 
+    clean_ticker = ticker.replace(".JK", "")
+
     query = text("""
         SELECT *
         FROM stock_features
@@ -218,9 +220,11 @@ def get_features(ticker: str):
         ORDER BY date
     """)
 
-    df = pd.read_sql(query, engine, params={"ticker": ticker})
+    with engine.connect() as conn:
+        result = conn.execute(query, {"ticker": clean_ticker})
+        rows = result.fetchall()
 
-    return df.to_dict(orient="records")
+    return [dict(row._mapping) for row in rows]
 
 @app.get("/metadata")
 def get_metadata():
