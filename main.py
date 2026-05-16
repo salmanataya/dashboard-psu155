@@ -239,6 +239,15 @@ def get_metadata():
 
     return df.to_dict(orient="records")
 
+@app.get("/health-db")
+def health():
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            return {"db": "ok", "result": list(result)}
+    except Exception as e:
+        return {"db": "fail", "error": str(e)}
+
 @app.get("/update")
 def manual_update():
 
