@@ -194,37 +194,66 @@ scheduler.start()
 def root():
     return {"message": "Stockation API running"}
 
+@app.get("/stocks")
 @app.get("/stocks/{ticker}")
-def get_stock_data(ticker: str):
+def get_stock_data(ticker: str = None):
 
-    query = text("""
-        SELECT *
-        FROM stock_prices
-        WHERE ticker = :ticker
-        ORDER BY date
-    """)
+    try:
+        if ticker:
+            query = text("""
+                SELECT *
+                FROM stock_prices
+                WHERE ticker = :ticker
+                ORDER BY date
+            """)
+            df = pd.read_sql(query, engine, params={"ticker": ticker})
 
-    df = pd.read_sql(query, engine, params={"ticker": ticker})
+        else:
+            query = """
+                SELECT *
+                FROM stock_prices
+                ORDER BY ticker, date
+            """
+            df = pd.read_sql(query, engine)
 
-    return df.to_dict(orient="records")
+        return df.to_dict(orient="records")
 
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/features")
 @app.get("/features/{ticker}")
-def get_features(ticker: str):
+def get_features(ticker: str = None):
 
-    clean_ticker = ticker.replace(".JK", "")
+    try:
+        if ticker:
+            clean_ticker = ticker.replace(".JK", "")
 
-    query = text("""
-        SELECT *
-        FROM stock_features
-        WHERE ticker = :ticker
-        ORDER BY date
-    """)
+            query = text("""
+                SELECT *
+                FROM stock_features
+                WHERE ticker = :ticker
+                ORDER BY date
+            """)
 
-    with engine.connect() as conn:
-        result = conn.execute(query, {"ticker": clean_ticker})
-        rows = result.fetchall()
+            with engine.connect() as conn:
+                result = conn.execute(query, {"ticker": clean_ticker})
+                rows = result.fetchall()
 
-    return [dict(row._mapping) for row in rows]
+            return [dict(row._mapping) for row in rows]
+
+        else:
+            query = """
+                SELECT *
+                FROM stock_features
+                ORDER BY ticker, date
+            """
+            df = pd.read_sql(query, engine)
+
+            return df.to_dict(orient="records")
+
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/metadata")
 def get_metadata():
