@@ -210,24 +210,25 @@ def get_stock_data(ticker: str):
 
 @app.get("/features/{ticker}")
 def get_features(ticker: str):
+    try:
+        query = text("""
+            SELECT *
+            FROM stock_features
+            WHERE ticker = :ticker
+            ORDER BY date
+        """)
 
-    query = text("""
-        SELECT *
-        FROM stock_features
-        WHERE ticker = :ticker
-        ORDER BY date
-    """)
+        print("DEBUG ticker:", ticker)
 
-    df = pd.read_sql_query(query, engine, params={"ticker": ticker})
+        df = pd.read_sql(query, engine, params={"ticker": ticker})
 
-    # safety: handle empty data
-    if df.empty:
-        return {"message": "No features found", "data": []}
+        print("DEBUG rows:", len(df))
 
-    # safety: convert NaN -> None biar JSON aman
-    df = df.where(pd.notnull(df), None)
+        return df.to_dict(orient="records")
 
-    return df.to_dict(orient="records")
+    except Exception as e:
+        print("ERROR FEATURES:", e)
+        return {"error": str(e)}
 
 @app.get("/metadata")
 def get_metadata():
