@@ -190,6 +190,11 @@ scheduler.start()
 # API ENDPOINTS
 # =====================================
 
+def clean_df(df):
+    df = df.replace([np.inf, -np.inf], None)
+    df = df.where(pd.notnull(df), None)
+    return df
+
 @app.get("/")
 def root():
     return {"message": "Stockation API running"}
@@ -216,6 +221,8 @@ def get_stock_data(ticker: str = None):
             """
             df = pd.read_sql(query, engine)
 
+        df = clean_df(df)
+
         return df.to_dict(orient="records")
 
     except Exception as e:
@@ -240,7 +247,8 @@ def get_features(ticker: str = None):
                 result = conn.execute(query, {"ticker": clean_ticker})
                 rows = result.fetchall()
 
-            return [dict(row._mapping) for row in rows]
+            data = [dict(row._mapping) for row in rows]
+            df = pd.DataFrame(data)
 
         else:
             query = """
@@ -250,24 +258,30 @@ def get_features(ticker: str = None):
             """
             df = pd.read_sql(query, engine)
 
-            return df.to_dict(orient="records")
+        df = clean_df(df)
+
+        return df.to_dict(orient="records")
 
     except Exception as e:
         return {"error": str(e)}
-
+        
 @app.get("/metadata")
 def get_metadata():
 
-    query = """
-    SELECT *
-    FROM stock_metadata
-    """
+    try:
+        query = """
+        SELECT *
+        FROM stock_metadata
+        """
 
-    df = pd.read_sql(query, engine)
-    df = df.replace({None: None})
-    df = df.fillna("")
+        df = pd.read_sql(query, engine)
 
-    return df.to_dict(orient="records")
+        df = clean_df(df)
+
+        return df.to_dict(orient="records")
+
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/health-db")
 def health():
